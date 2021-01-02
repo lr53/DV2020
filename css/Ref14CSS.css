@@ -1,0 +1,153 @@
+
+html,body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10px;
+}
+
+html,h4 {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  text-align:center
+}
+
+
+.piechart text {
+  font-size: 10px;
+  fill: black;
+}
+
+
+.barchart text {
+  font-size: 7px;
+  fill: black;
+}
+
+.barchart .bars.enterSelection  { /* Select decendants of class 'barchart' elements where the descendants  are both of class  'bars'  AND  class 'enterSelection' */
+	fill: #003249;
+	opacity: 1;
+}
+
+.barchart .bars.updateSelection {
+	fill: #007EA7;
+	opacity: 1;
+}
+
+.barchart .bars.exitSelection {
+	fill: #56CBF9;
+	opacity: 1;
+}
+
+.barchart .bars.highlight {
+	fill: #CCDBDC;
+	opacity: 1;
+}
+
+.scatterplot .points.enterSelection  { /* Select decendants of class 'barchart' elements where the descendants  are both of class  'bars'  AND  class 'enterSelection' */
+	fill: #003249;
+	opacity: 1;
+}
+
+.scatterplot .points.updateSelection {
+	fill: #007EA7;
+	opacity: 1;
+}
+
+.scatterplot .points.exitSelection {
+	fill: #56CBF9;
+	opacity: 1;
+}
+
+.scatterplot .points.highlight {
+	fill: #CCDBDC;
+	opacity: 1;
+}
+
+.classCountry.key--SCT { fill: #003249; }
+.classCountry.key--WLS { fill: #007EA7; }
+.classCountry.key--NIR { fill: #56CBF9; }
+.classCountry.key--ENG { fill: #9AD1D4; }
+.classCountry.key--IRL { fill: #CCDBDC; }
+.classCountry.highlight {  stroke: black;  }
+
+.classTown text {
+	text-anchor: start;
+	font-size: 0px;
+}
+
+.classTown.highlight text {
+	font-size: 15px;
+	fill: black;
+  opacity: 0.5;
+}
+.classTown circle {
+	stroke: grey;
+	fill: white;
+  opacity: 0.5;
+}
+.classTown.highlight circle {
+	stroke: black;
+	fill: black;
+}
+
+.piechart .highlight path {
+	fill: #CCDBDC;
+	opacity: 1;
+}
+
+/* Group styling*/
+.cssClassNode {
+	cursor: pointer;
+}
+.cssClassNode :hover
+{
+	font: 14px "Helvetica Neue";
+}
+
+/* Link styling*/
+.cssClassLink {
+	fill: none;
+	stroke: #003249;
+	stroke-width: 1.5px;
+	pointer-events: none;
+}
+
+/* Circle styling*/
+.cssClassNode circle {
+	stroke: #003249;
+	fill: #9AD1D4;
+	stroke-width: 1.5px;
+}
+.leafNode circle {
+	fill: #003249;
+}
+.rootNode circle {
+	fill: #56CBF9;
+}
+.cssClassNode.highlight  circle {
+	stroke: black;
+	fill: yellow;
+	stroke-width: 1.5px;
+}
+
+
+/* Text styling*/
+.cssClassNode text {
+	fill: #003249;
+	font: 10px "Helvetica Neue";
+}
+.cssClassNode.rootNode text{
+	text-anchor: start;
+    transform: translate(-5px, -12px);
+}
+.cssClassNode.intermediateNode text{
+	text-anchor: middle;
+    transform: translate(0px, -12px);
+}
+.cssClassNode.leafNode text{
+	text-anchor: start;
+    transform: translate(12px, 0px);
+}
+.cssClassNode.highlight text {
+	fill: black;
+	font: 12px sans-serif;
+}
