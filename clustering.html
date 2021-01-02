@@ -1,0 +1,132 @@
+<!--------------------------------------------------------------------
+
+   Module: REF 14 Results Dashboard - Clustering
+
+   References: Code taken and adapted from
+   				- F21DV Live Examples 
+   				- Mike Bostock's Examples
+
+---------------------------------------------------------------------->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Agglomerative Clustering Example</title>
+	<script type="text/javascript" src="d3/d3.v4.js"></script>
+	<script src="lib/model/Ref14Model.js"></script>
+	<script src="lib/views/agglomerative_v001.js"></script>
+	<script src="lib/views/tree_v001.js"></script>
+	<script src="http://d3js.org/topojson.v1.min.js"></script>
+	<link rel="stylesheet" type="text/css" href="css/Ref14CSS.css"/>
+  	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+</head>
+
+<body>
+
+	<h1>Ref14 Results Dashboard</h1>
+	<button onclick="location.href='index.html'">Director of Research</button>
+	<button onclick="location.href='ECR.html'">Early Career Researcher</button>
+	<button onclick="location.href='UKRI.html'">UKRI</button>
+	<button onclick="location.href='clustering.html'">Clustering</button>
+	<br>
+	<br>
+	<h3>Agglomerative Clustering</h3>
+
+	<div id="dendogramDIV"></div>
+
+<script type="text/javascript">
+"use strict"
+
+var dm1 = modelConstructor()
+			.addBasicTopicArrayData(false); //Create datamodel object (gives access to methods in ref14model.js etc )
+var dataModel; //shorthand for dm1.model() and declared as nasty outer block variable for easy access from console.
+var oneDsimMatrix;
+var twoDsimMatrix;
+var listOfCategories;
+var topicTable;
+var agC1  = agglomCluster(); //Agglomerative clustering service
+var maxSim;
+var indexOfLastNode;
+var linkageTable;
+var tree;
+
+//=============== READ DATA FILES ================================
+
+d3.queue()
+	.defer(d3.csv, "data/topics/REF2014T30TopicOrder.csv")
+	.defer(d3.csv, "data/290183_REF_Contextual_table_1314_0.csv")
+	.defer(d3.csv, "data/learning-providers-plus.csv")
+	.defer(d3.json, "data/topics/REF2014T30Python.json")
+	.defer(d3.json, "data/uk.json")
+	.defer(d3.csv, "data/REF2014_Results.csv")
+	.await(initialiseApp)
+
+//======================== FUNCTIONS ==============================
+
+function addCluster(){
+	maxSim = agC1.maxSim();
+	agC1.addCluster(maxSim, "node_"+indexOfLastNode);
+	indexOfLastNode++;
+	oneDsimMatrix = agC1.oneDsimMatrix();
+	listOfCategories = agC1.linkageTable();
+
+	//Just add each max similarity node to the table (as this is all the linkage table is)
+	linkageTable = agC1.linkageTable();
+	agC1.inactivateOldRowsAndColums(maxSim);
+
+	return indexOfLastNode;
+}
+
+function createParents() {
+	var clusterLength = 0;
+	while (clusterLength <= 58){
+		clusterLength = addCluster();
+	}
+	var entries = linkageTable.filter(e => e.similarity);
+	var parentList = [];
+
+	//add into the array the first node (no parent). If we don't do this,  cant pass to stratify()
+	parentList.push({'topic':'node_58','parent': null, 'similarity':0.0003909881275583081});
+
+	//need to get parents of child nodes and add to parent array
+	entries.forEach(e=>{
+		parentList.push({'topic':e.similarity.xCat, 'parent':e.nodeIndex, 'similarity':e.similarity.similarity});
+		parentList.push({'topic':e.similarity.yCat, 'parent':e.nodeIndex, 'similarity':e.similarity.similarity});
+		//console.log(parentList);
+		});
+	return parentList;
+}
+
+//======================== MAIN FUNCTION =================================
+//Carries out all initialization and setup
+function initialiseApp(error, ref14data, ref14context , learningProviders, jsonTopicData, uk, REFcsvData){
+	//Check data files have loaded
+	if (error) {console.log (" there are errror with loading the data: ", error); return;}
+
+	//Create model
+	dm1.loadData(ref14data, ref14context , learningProviders, jsonTopicData, REFcsvData)
+	dataModel = dm1.model();
+
+	//Load data into agglomerative cluster toolagC1
+	agC1.refFormatLoadSimData(dataModel.topics);
+	listOfCategories = agC1.listOfCategories();
+	indexOfLastNode = listOfCategories.length;
+	
+	topicTable = createParents();
+	
+	var root = d3.stratify()
+			.id(d=>d.topic)
+			.parentId(d=>d.parent)
+			(topicTable);
+
+	console.log("topic table:", topicTable);
+
+	tree = tree("#dendogramDIV")
+			.loadAndRenderDataset(root);
+
+}
+
+</script>
+</body>
+</html>

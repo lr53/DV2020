@@ -1,0 +1,291 @@
+<!--------------------------------------------------------------------
+
+   Module: REF 14 Results Dashboard - UKRI
+
+   References: Code taken and adapted from
+   				- F21DV Live Examples 
+   				- Mike Bostock's Examples
+
+---------------------------------------------------------------------->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Ref 14 Results Dashboard </title>
+	<script type="text/javascript" src="d3/d3.v4.js"></script>
+	<script src="lib/model/Ref14Model.js"></script>
+	<link rel="stylesheet" type="text/css" href="css/Ref14CSS.css"/>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+	<script src="lib/views/Ref14BarchartView.js"></script>
+	<script src="lib/views/Ref14ScatterPlotView.js"></script>
+	<script src="lib/views/Ref14MapView.js"></script>
+	<script src="lib/views/Ref14PiechartView.js"></script>
+	<script src="http://d3js.org/topojson.v1.min.js"></script>
+</head>
+
+<body>
+	<h1>Ref14 Results Dashboard</h1>
+	<button  onclick="location.href='index.html'">Director of Research</button>
+	<button onclick="location.href='ECR.html'">Early Career Researcher</button>
+	<button onclick="location.href='UKRI.html'">UKRI</button>
+	<button onclick="location.href='clustering.html'">Clustering</button>
+	<br>
+	<br>
+
+	<h3>UKRI</h3>
+	<div ID="dropDownDIV"><p> Select Department: </p></div>
+	<br>
+	<br>
+
+	<div class="row">
+    	<div class="col-md-6">
+			<h4>Scatter Plot of Scaled FTE vs Overall 4* Ratings</h4>
+			<div ID=scatterDIV></div>
+		</div>
+
+		<div class="col-md-6">
+			<h4>Map</h4>
+			<div ID=mapDIV></div>
+		</div>
+	</div>
+
+	<div class="row">
+    	<div class="col-md-4">
+			<h4>4* Ratings for Environment</h4>
+			<div ID=bc1DIV></div>
+		</div>
+
+		<div class="col-md-4">
+			<h4>4* Ratings for Impact</h4>
+			<div ID=bc2DIV></div>
+		</div>
+
+		<div class="col-md-4">
+			<h4>4* Ratings for Outputs</h4>
+			<div ID=bc3DIV></div>
+		</div>
+	</div>
+<script type="text/javascript">
+"use strict"
+
+var	map1; //Map 1
+var sp1; //Scatterplot1
+var bc1, bc2, bc3; //Bar Charts
+var dm1 = modelConstructor()  //Create datamodel object (gives access to methods in ref14model.js etc )
+var dataModel; //shorthand for dm1.model() and declared as nasty outer block variable for easy access from console.
+var countries, towns;
+
+//====================== READ DATA FILES =======================================
+
+d3.queue()
+	.defer(d3.csv, "data/topics/REF2014T30TopicOrder.csv")
+	.defer(d3.csv, "data/290183_REF_Contextual_table_1314_0.csv")
+	.defer(d3.csv, "data/learning-providers-plus.csv")
+	.defer(d3.json, "data/topics/REF2014T30Python.json")
+	.defer(d3.json, "data/uk.json")
+	.defer(d3.csv, "data/REF2014_Results.csv")
+	.await(initialiseApp)
+
+//======================== MAIN FUNCTION =======================================
+
+//Carries out all initialization and setup
+function initialiseApp(error, ref14data, ref14context , learningProviders, jsonTopicData, uk, REFcsvData){
+
+//Check data files have loaded
+	if ( error ) {console.log (" there are errors with loading the data: ", error); return;}
+	countries = topojson.feature(uk, uk.objects.subunits).features;
+
+//Create model
+	dm1.loadData(ref14data, ref14context , learningProviders, jsonTopicData, REFcsvData);
+	dataModel = dm1.model();
+
+//========================== DROP DOWN ========================================	
+
+//Organise alphabetically by UOA (get list for dropdown)
+	var uoas = d3.nest()
+		.key(function(d) { return d.UoAString; })
+			.sortKeys(d3.ascending)
+		.entries(dataModel.refEntries);
+	uoas = uoas.map(e => e.key)
+
+//Add UOA drop-down
+  var uoaSelect = d3.select('#dropDownDIV')
+	  .append('select')
+		.attr('id','selectID')
+		.on('change',onUoaChange)
+	renderUoaOptionsDropdown(uoas, uoaSelect);
+
+function onUoaChange() {
+	var selectedUoa = d3.select('#selectID').property('value')
+		renderUoAData(selectedUoa)
+};
+
+//Enter exit selection for dropdown
+function renderUoaOptionsDropdown(uoas, uoaSelect){
+	var uoaOptions = uoaSelect //Select and bind
+			.selectAll('.uoaOptionClass')
+			.data(uoas);
+		uoaOptions //Enter Selection
+			.enter()
+			.append('option')
+			.classed("uoaOptionClass", true)
+			.text(function (d) { return d; })
+		uoaOptions  //Update Selection
+			.text(function (d) { return d; })
+		uoaOptions  //Exit Selection
+			.exit()
+			.remove();
+}
+
+//========================== SCATTER PLOT ======================================
+
+sp1 = scatterplot("#scatterDIV")
+		.overrideDataFieldFunction(e => Number(e.overall["4*"]))//x-coord
+		.overrideDataField2Function(e => Number(e.context.scaledFTE)) //ycoord
+		.overrideKeyFunction(e => e["Institution name"])
+		.overrideTooltipFunction(e => {return e["Institution name"] + ", " + "Scaled FTE: " + e.context.scaledFTE + ", Overall 4* Rating = " + e.overall["4*"];})
+		.appendedMouseOverFunction(highlightTownInMap)
+		.appendedMouseOutFunction(removeHighlightingMap)
+		.appendedMouseOver2Function(highlightBarChart2)
+		.appendedMouseOut2Function(removeHighlightingBC);		
+
+//=====================BARCHART==============================================
+
+	bc1 = barchart("#bc1DIV")
+		.overrideDataFieldFunction(e => Number(e.environment["4*"])) //Use the 4* assessment as the bar size
+		.overrideKeyFunction(e => e["Institution name"])
+		.overrideTooltipFunction(e => {return e["Institution name"] + ", " + "Region provider: " + e.context.regionProvider + ", 4* = " + e.environment["4*"];})
+		//.overrideClickFunction(clickFunction)
+		.appendedMouseOverFunction(highlightTownInMap)
+		.appendedMouseOutFunction(removeHighlightingMap)
+		.appendedMouseOver2Function(highlightBarChart2)
+		.appendedMouseOut2Function(removeHighlightingBC);
+
+	bc2 = barchart("#bc2DIV")
+		.overrideDataFieldFunction(e => Number(e.impact["4*"])) //Use the 4* assessment as the bar size
+		.overrideKeyFunction(e => e["Institution name"])
+		.overrideTooltipFunction(e => {return e["Institution name"] + ", " + "Region provider: " + e.context.regionProvider + ", 4* = " + e.environment["4*"];})
+		//.overrideClickFunction(clickFunction)
+		.appendedMouseOverFunction(highlightTownInMap)
+		.appendedMouseOutFunction(removeHighlightingMap)
+		.appendedMouseOver2Function(highlightBarChart2)
+		.appendedMouseOut2Function(removeHighlightingBC);
+
+	bc3 = barchart("#bc3DIV")
+		.overrideDataFieldFunction(e => Number(e.outputs["4*"])) //Use the 4* assessment as the bar size
+		.overrideKeyFunction(e => e["Institution name"])
+		.overrideTooltipFunction(e => {return e["Institution name"] + ", " + "Region provider: " + e.context.regionProvider + ", 4* = " + e.environment["4*"];})
+		//.overrideClickFunction(clickFunction)
+		.appendedMouseOverFunction(highlightTownInMap)
+		.appendedMouseOutFunction(removeHighlightingMap)
+		.appendedMouseOver2Function(highlightBarChart2)
+		.appendedMouseOut2Function(removeHighlightingBC);
+	
+renderUoAData(uoas[0]);
+
+//========================== MAP ==============================================
+
+	map1 = map("#mapDIV")
+		.loadAndRenderMap(countries)
+		.overrideTownLongLatAccessor(longLatAccessor)
+		.overrideTownNameAccessor(d=>firstCaps(d.key))
+		.appendedMouseOverFunction(highlightBarChart)
+		.appendedMouseOutFunction(removeHighlighting);
+
+		var townGroups = d3.nest().key(e=>e.lp.TOWN).entries(dataModel.refEntries);
+		map1.loadAndRenderTowns(townGroups);
+	}
+
+//======================== HELPER FUNCTIONS =================================
+
+function renderUoAData(uoas){
+		var chartData = dataModel.refEntries
+		.filter(e => e.UoAString == uoas)
+		.sort((a, b) => d3.descending(
+			a.environment["4*"],
+			b.environment["4*"]
+		))
+//Render the charts
+	sp1.loadAndRenderDataset(chartData);
+	bc1.loadAndRenderDataset(chartData);
+	bc2.loadAndRenderDataset(chartData);
+	bc3.loadAndRenderDataset(chartData);
+
+}
+
+//==================== HIGHLIGHTING FUNCTIONS =======================================
+
+var barToHilight;
+var townToHilight;
+
+function highlightBarChart(d){
+	var clickedTown = d.key
+	console.log(clickedTown);
+	var refEntriesWithThisTown = dataModel.refEntries
+									.filter(e=>e.lp.TOWN === clickedTown);
+	//console.log(refEntriesWithThisTown);
+	barToHilight = refEntriesWithThisTown.map(function(e){return ".key--" + e["Institution name"].replace(/[\W]+/g,"_")})
+
+	// need to remove duplicate entries by using Set()
+	let filt = new Set();
+	barToHilight.filter((e)=>{!filt.has(e) && filt.add(e)
+	})
+
+	barToHilight.forEach(function(bar){
+		d3.selectAll(bar).classed("highlight", true)
+	})
+
+}
+
+function removeHighlighting(d) {
+	barToHilight.forEach(function(bar){
+		d3.selectAll(bar).classed("highlight", false)
+	})
+}
+
+function highlightBarChart2 (d){
+		d3.selectAll(".key--" + d["Institution name"].replace(/[\W]+/g,"_"))
+			.classed("highlight", true)   //add "highlight" class to selected DOM elements
+	}
+
+function removeHighlightingBC(d) {
+			d3.selectAll(".key--" + d["Institution name"].replace(/[\W]+/g,"_"))//select all DOM elements with class "key--<d.keyField>"
+			.classed("highlight", false)
+}
+
+function highlightTownInMap(d){
+	var clickedTown = d.lp.TOWN;
+	var mapEntWithThisTown = dataModel.refEntries.filter(e=>e.lp.TOWN === clickedTown);
+	//console.log(mapEntWithThisTown);
+
+	townToHilight = mapEntWithThisTown.map(function(e){ return ".key--"+e.lp.TOWN.replace(/[\W]+/g,"_")
+			})
+	//console.log(townToHilight);
+
+	townToHilight.forEach(function(town){
+		d3.selectAll(town).classed("highlight", true).append("text").text(clickedTown)
+	})
+}
+
+function removeHighlightingMap(d) {
+	townToHilight.forEach(function(t){
+		d3.selectAll(t).classed("highlight", false)
+	})
+}
+
+//==================== MAP FUNCTIONS =======================================
+
+function firstCaps(name) {
+	return name[0] + name.slice(1).toLowerCase()
+};
+
+function longLatAccessor(d) {
+	var latitude = d.values[0].lp.LATITUDE;
+	var longitude = d.values[0].lp.LONGITUDE;
+	return [longitude, latitude]
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,270 @@
+<!--------------------------------------------------------------------
+
+   Module: REF 14 Results Dashboard - Director of Research
+
+   References: Code taken and adapted from
+   				- F21DV Live Examples 
+   				- Mike Bostock's Examples
+
+---------------------------------------------------------------------->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Ref 14 Results Dashboard </title>
+	<script type="text/javascript" src="d3/d3.v4.js"></script>
+	<script src="lib/model/Ref14Model.js"></script>
+	<link rel="stylesheet" type="text/css" href="css/Ref14CSS.css"/>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+	<script src="lib/views/Ref14BarchartView.js"></script>
+	<script src="lib/views/Ref14MapView.js"></script>
+	<script src="lib/views/Ref14PiechartView.js"></script>
+	<script src="http://d3js.org/topojson.v1.min.js"></script>
+</head>
+<body>
+	<h1>Ref14 Results Dashboard</h1>
+	<button onclick=" ">Director of Research</button>
+	<button onclick="location.href='ECR.html'">Early Career Researcher</button>
+	<button onclick="location.href='UKRI.html'">UKRI</button>
+	<button onclick="location.href='clustering.html'">Clustering</button>
+	<br>
+	<br>
+	<h3>Director of Research</h3>
+	<div ID="dropDownDIV"><p> Select Department of Interest: </p></div>
+	<br>
+	<br>
+	<div class="row">
+      <div class="col-md-4">
+			<h4>4* Environment Ratings of Department</h4>
+			<div ID=barchartDIV></div>
+			</div>
+			<div class="col-md-4">
+			<h4>Ratings Breakdown for Selected University and Department</h4>
+			<div ID=piechartDIV></div>
+			</div>
+			<div class="col-md-4">
+			<h4>Map</h4>
+			<div ID=mapDIV></div>
+			</div>
+	</div>
+
+<script type="text/javascript">
+"use strict"
+
+var bc1; //Barchart 1
+var pie1; //Piechart 1
+var	map1; //Map 1
+var dm1 = modelConstructor()        //Create datamodel object (gives access to methods in ref14model.js etc )
+var dataModel; //shorthand for dm1.model() and declared as nasty outer block variable for easy access from console.
+var countries, towns;
+
+
+
+//=============== READ DATA FILES =======================================
+
+d3.queue()
+	.defer(d3.csv, "data/topics/REF2014T30TopicOrder.csv")
+	.defer(d3.csv, "data/290183_REF_Contextual_table_1314_0.csv")
+	.defer(d3.csv, "data/learning-providers-plus.csv")
+	.defer(d3.json, "data/topics/REF2014T30Python.json")
+	.defer(d3.json, "data/uk.json")
+	.defer(d3.csv, "data/REF2014_Results.csv")
+	.await(initialiseApp)
+
+//======================== MAIN FUNCTION =================================
+
+//Carries out all initialization and setup
+function initialiseApp(error, ref14data, ref14context , learningProviders, jsonTopicData, uk, REFcsvData){
+
+//Check data files have loaded
+	if ( error ) {console.log (" there are errors with loading the data: ", error); return;}
+
+	countries = topojson.feature(uk, uk.objects.subunits).features;
+
+//Create model
+	dm1.loadData(ref14data, ref14context , learningProviders, jsonTopicData, REFcsvData);
+	dataModel = dm1.model();
+
+//========================== DROP DOWN ========================================	
+
+//Organise (nest) alphabetically by UOA (get list for dropdown)
+	var uoas = d3.nest()
+		.key(function(d) { return d.UoAString; })
+			.sortKeys(d3.ascending)
+		.entries(dataModel.refEntries);
+	uoas = uoas.map(e => e.key)
+
+
+//Add UOA drop-down
+  	var uoaSelect = d3.select('#dropDownDIV')
+	  	.append('select')
+		.attr('id','selectID')
+		.on('change',onUoaChange)
+
+	renderUoaOptionsDropdown(uoas, uoaSelect);
+
+	function onUoaChange() {
+		var selectedUoa = d3.select('#selectID').property('value')
+			renderUoAData(selectedUoa);
+	};
+
+
+	function renderUoaOptionsDropdown(uoas, uoaSelect){
+		var uoaOptions = uoaSelect //Select and bind
+			.selectAll('.uoaOptionClass')
+			.data(uoas);
+
+		uoaOptions //Enter Selection
+			.enter()
+			.append('option')
+			.classed("uoaOptionClass", true)
+			.text(function (d) { return d; })
+		uoaOptions  //Update Selection
+			.text(function (d) { return d; })
+		uoaOptions  //Exit Selection
+			.exit()
+			.remove();
+	}
+
+//=====================BARCHART==============================================
+
+	bc1 = barchart("#barchartDIV")
+		.overrideDataFieldFunction(e => Number(e.environment["4*"])) //Use the 4* assessment as the bar size
+		.overrideKeyFunction(e => e["Institution name"])
+		.overrideTooltipFunction(e => {return e["Institution name"] + ", " + "Region provider: " + e.context.regionProvider + ", 4* = " + e.environment["4*"];})
+		.overrideClickFunction(clickFunction)
+		.appendedMouseOverFunction(highlightTownInMap)
+		.appendedMouseOutFunction(removeHighlightingMap);
+	
+	renderUoAData(uoas[0]);
+
+
+//============================PIECHART======================================
+
+ 	pie1 = piechart("#piechartDIV")
+ 		.overrideDataFieldFunction(e => Number(e));
+
+ 	function renderUniDataAsPiechart(uni, dep){
+	var pieData = dataModel.refEntries
+		.filter(e =>e["Institution name"] === uni && e.UoAString === dep)
+
+	var data = [];
+	data.push(pieData[0].environment["4*"]);
+	data.push(pieData[0].environment["3*"]);
+	data.push(pieData[0].environment["2*"]);
+	data.push(pieData[0].environment["1*"]);
+	data.push(pieData[0].environment["unclassified"]);
+	console.log("my log",data);
+	pie1.loadAndRenderDataset(data)
+
+}
+
+//======================== HELPER FUNCTIONS =================================
+
+
+	function renderUoAData(uoas){
+		var bc1Data = dataModel.refEntries
+		.filter(e => e.UoAString == uoas)
+		.sort((a, b) => d3.descending(
+			a.environment["4*"],
+			b.environment["4*"]
+		))
+//Render the barchart
+	bc1.loadAndRenderDataset(bc1Data);
+}
+
+
+//==================== HIGHLIGHTING FUNCTIONS =======================================
+
+var townToHilight;
+var barToHilight;
+
+function highlightTownInMap(d){
+	var clickedTown = d.lp.TOWN;
+	//console.log(clickedUni);
+
+	var mapEntWithThisTown = dataModel.refEntries.filter(e=>e.lp.TOWN === clickedTown);
+	//console.log(mapEntWithThisTown);
+
+	townToHilight = mapEntWithThisTown.map(function(e){ return ".key--"+e.lp.TOWN.replace(/[\W]+/g,"_")
+			})
+	//console.log(townToHilight);
+
+	townToHilight.forEach(function(town){
+		d3.selectAll(town).classed("highlight", true).append("text").text(clickedTown)
+	})
+}
+
+function removeHighlightingMap(d) {
+	townToHilight.forEach(function(t){
+		d3.selectAll(t).classed("highlight", false)
+	})
+}
+
+function highlightBarChart(d){
+	var clickedTown = d.key
+	//console.log(clickedTown);
+	var refEntriesWithThisTown = dataModel.refEntries
+									.filter(e=>e.lp.TOWN === clickedTown);
+	//console.log(refEntriesWithThisTown);
+	barToHilight = refEntriesWithThisTown.map(function(e){return ".key--" + e["Institution name"].replace(/[\W]+/g,"_")})
+
+	// need to remove duplicate entries by using Set()
+	let filt = new Set();
+	barToHilight.filter((e)=>{!filt.has(e) && filt.add(e)
+	})
+
+	barToHilight.forEach(function(bar){
+		d3.selectAll(bar).classed("highlight", true)
+	})
+
+}
+
+function removeHighlighting(d) {
+	barToHilight.forEach(function(bar){
+		d3.selectAll(bar).classed("highlight", false)
+	})
+}
+
+//==================== CLICK FUNCTION =======================================
+function clickFunction(d) {
+	console.log("override click function", "uni = ", d["Institution name"], ", uoa =", d.UoAString, ", environment= ", d.environment)
+	// add method for when a uni on barchart is clicked, environment data is loaded into piechart.
+	var uni = d["Institution name"];
+	var dep = d.UoAString;
+	renderUniDataAsPiechart(uni, dep)
+	//	renderPiechart(uni) need to add a method to render data for piechart.
+}
+
+//==========================MAP==============================================
+var profile;
+	map1 = map("#mapDIV")
+		.loadAndRenderMap(countries)
+		.overrideTownLongLatAccessor(longLatAccessor)
+		.overrideTownNameAccessor(d=>firstCaps(d.key))
+		.appendedMouseOverFunction(highlightBarChart)
+		.appendedMouseOutFunction(removeHighlighting);
+
+		var townGroups = d3.nest().key(e=>e.lp.TOWN).entries(dataModel.refEntries);
+//And load the towns into the map
+		map1.loadAndRenderTowns(townGroups);
+	}
+
+//============================MAP FUNCTIONS=====================================
+
+
+function firstCaps(name) {
+	return name[0] + name.slice(1).toLowerCase()
+};
+
+function longLatAccessor(d) {
+	var latitude = d.values[0].lp.LATITUDE;
+	var longitude = d.values[0].lp.LONGITUDE;
+	return [longitude, latitude]
+}
+
+</script>
+</body>
+</html>
